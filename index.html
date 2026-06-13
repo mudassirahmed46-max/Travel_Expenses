@@ -1,0 +1,583 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Receipt Ledger</title>
+
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Sora:wght@500;600;700&family=Inter:wght@400;500;600;700&family=Space+Mono:wght@400;700&display=swap" rel="stylesheet">
+
+<script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/exceljs/4.4.0/exceljs.min.js"></script>
+
+<style>
+  :root{
+    --bg:#EFF1F4; --surface:#FFFFFF; --ink:#14171F; --ink-2:#3A3F4B;
+    --muted:#767B86; --line:#E4E7EC; --line-2:#D7DBE2;
+    --accent:#3355FF; --accent-soft:#EDF0FF; --accent-deep:#1F3BD6;
+    --pos:#0E9F6E; --danger:#E0464B;
+    --hero:#15171E; --hero-2:#20232D;
+    --r:16px; --shadow:0 1px 2px rgba(20,23,31,.04), 0 6px 20px rgba(20,23,31,.06);
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0;padding:0}
+  body{background:var(--bg);color:var(--ink);font-family:'Inter',system-ui,sans-serif;line-height:1.5;-webkit-font-smoothing:antialiased;padding-bottom:92px}
+  .num{font-variant-numeric:tabular-nums;font-feature-settings:'tnum'}
+  .wrap{max-width:720px;margin:0 auto;padding:0 16px}
+
+  /* header */
+  header{display:flex;align-items:center;gap:11px;padding:22px 0 6px}
+  .logo{width:36px;height:36px;border-radius:10px;background:var(--ink);color:#fff;display:grid;place-items:center;font-family:'Space Mono',monospace;font-weight:700;font-size:14px;letter-spacing:-1px}
+  .app-name{font-family:'Sora',sans-serif;font-weight:700;font-size:18px;letter-spacing:-.4px}
+  .app-tag{font-size:12.5px;color:var(--muted);margin-top:1px}
+
+  /* hero total */
+  .hero{background:var(--hero);background-image:radial-gradient(120% 140% at 100% 0%, #262a36 0%, var(--hero) 55%);color:#fff;border-radius:20px;padding:22px 22px 20px;margin:14px 0 6px;box-shadow:var(--shadow);overflow:hidden}
+  .hero .lbl{font-family:'Space Mono',monospace;font-size:11px;letter-spacing:2.5px;text-transform:uppercase;color:#8b90a0}
+  .figs{display:flex;flex-wrap:wrap;gap:10px 30px;margin-top:12px;align-items:flex-end}
+  .fig{display:flex;flex-direction:column;gap:2px}
+  .fig .v{font-family:'Sora',sans-serif;font-weight:700;font-size:clamp(26px,7vw,36px);letter-spacing:-1px;line-height:1}
+  .fig .c{font-size:11px;color:#9499a8;letter-spacing:.4px}
+  .hero .meta{margin-top:16px;padding-top:14px;border-top:1px solid rgba(255,255,255,.1);display:flex;gap:18px;flex-wrap:wrap;font-size:12.5px;color:#aab0bf}
+  .hero .meta b{color:#fff;font-weight:600}
+  .hero.empty .figs .v{color:#5b6172;font-size:24px}
+
+  /* cards */
+  .card{background:var(--surface);border:1px solid var(--line);border-radius:var(--r);box-shadow:var(--shadow);margin:14px 0;padding:18px}
+  .sec-h{display:flex;align-items:center;gap:9px;margin:0 0 14px}
+  .sec-n{width:22px;height:22px;border-radius:7px;background:var(--accent-soft);color:var(--accent);display:grid;place-items:center;font-size:12px;font-weight:700;font-family:'Sora',sans-serif;flex:none}
+  .sec-h h2{font-family:'Sora',sans-serif;font-size:16px;font-weight:600;letter-spacing:-.3px;margin:0}
+
+  /* capture */
+  .drop{display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;text-transform:none;letter-spacing:normal;color:var(--ink);border:1.5px dashed var(--line-2);border-radius:14px;padding:32px 20px;cursor:pointer;transition:.15s;background:#FAFBFC}
+  .drop:hover{border-color:var(--accent);background:var(--accent-soft)}
+  .drop .ic{width:46px;height:46px;border-radius:12px;background:var(--accent-soft);color:var(--accent);display:grid;place-items:center;margin:0 auto 10px;font-size:22px}
+  .drop p{margin:0 0 2px;font-weight:600;font-size:14.5px}
+  .drop small{color:var(--muted);font-size:12.5px}
+  input[type=file]{display:none}
+
+  .preview{display:flex;gap:15px;margin-top:15px;align-items:flex-start}
+  .preview img{width:104px;height:132px;object-fit:cover;border-radius:11px;border:1px solid var(--line);background:#eef0f3;flex:none}
+  .scan{flex:1;min-width:0}
+  .bar{height:7px;background:var(--line);border-radius:99px;overflow:hidden;margin-top:9px}
+  .bar>span{display:block;height:100%;width:0;background:var(--accent);transition:width .25s}
+  .status{font-size:13px;color:var(--muted);font-family:'Space Mono',monospace}
+
+  /* fields */
+  .grid{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-top:15px}
+  .field{display:flex;flex-direction:column;gap:6px}
+  .field.full{grid-column:1 / -1}
+  .field label{display:block;font-size:11.5px;font-weight:600;color:var(--muted);letter-spacing:.2px;text-transform:uppercase}
+  input,select{font-family:'Inter',sans-serif;font-size:15px;color:var(--ink);border:1px solid var(--line-2);border-radius:10px;padding:11px 12px;background:#fff;width:100%;transition:.15s;-webkit-appearance:none;appearance:none}
+  select{background-image:url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'><path d='M2 4l4 4 4-4' stroke='%23767B86' stroke-width='1.5' fill='none' stroke-linecap='round' stroke-linejoin='round'/></svg>");background-repeat:no-repeat;background-position:right 11px center;padding-right:30px}
+  input:focus,select:focus{outline:none;border-color:var(--accent);box-shadow:0 0 0 3px rgba(51,85,255,.13)}
+  input.amt{font-weight:700;font-variant-numeric:tabular-nums}
+
+  /* buttons */
+  .btn{font-family:'Sora',sans-serif;font-weight:600;font-size:14.5px;border:none;border-radius:11px;padding:12px 18px;cursor:pointer;transition:.15s;display:inline-flex;align-items:center;justify-content:center;gap:8px}
+  .btn-primary{background:var(--accent);color:#fff}
+  .btn-primary:hover{background:var(--accent-deep)}
+  .btn-dark{background:var(--ink);color:#fff}
+  .btn-dark:hover{background:#000}
+  .btn-ghost{background:#fff;color:var(--ink-2);border:1px solid var(--line-2)}
+  .btn-ghost:hover{border-color:var(--ink);color:var(--ink)}
+  .btn:disabled{opacity:.4;cursor:not-allowed}
+  .btn-row{display:flex;gap:10px;margin-top:16px}
+  .btn-row .btn{flex:1}
+
+  /* people chips */
+  .chips{display:flex;flex-wrap:wrap;gap:8px}
+  .chip{display:inline-flex;align-items:center;gap:8px;background:#F6F7F9;border:1px solid var(--line);border-radius:99px;padding:7px 9px 7px 14px;font-size:13.5px;font-weight:600}
+  .chip.me{background:var(--accent-soft);border-color:#d8e0ff;color:var(--accent-deep)}
+  .chip button{background:none;border:none;color:var(--muted);cursor:pointer;font-size:13px;line-height:1;padding:3px;border-radius:50%}
+  .chip button:hover{color:var(--danger);background:#fff}
+  .add-person{display:flex;gap:10px;margin-top:14px}
+  .add-person input{flex:1}
+  .add-person .btn{flex:none}
+
+  /* segmented */
+  .seg{display:flex;background:#F2F3F6;border-radius:11px;padding:3px;gap:2px;margin-bottom:15px;overflow-x:auto}
+  .seg button{border:none;background:transparent;font-family:'Sora',sans-serif;font-weight:600;font-size:13px;padding:8px 13px;border-radius:8px;cursor:pointer;color:var(--muted);white-space:nowrap;flex:1}
+  .seg button.on{background:#fff;color:var(--ink);box-shadow:0 1px 3px rgba(0,0,0,.09)}
+
+  .grp{margin-bottom:15px}
+  .grp:last-child{margin-bottom:0}
+  .ghead{display:flex;justify-content:space-between;align-items:baseline;margin-bottom:3px;padding-bottom:6px;border-bottom:1px solid var(--line)}
+  .gname{font-family:'Sora',sans-serif;font-weight:600;font-size:15px}
+  .gcount{font-family:'Space Mono',monospace;font-size:11px;color:var(--muted)}
+  .tline{display:flex;justify-content:space-between;align-items:baseline;padding:7px 0}
+  .tline .cur{font-weight:500;color:var(--ink-2);font-size:14px}
+  .tline .val{font-family:'Inter',sans-serif;font-weight:700;font-size:16px;font-variant-numeric:tabular-nums}
+
+  /* ledger */
+  .ledger-h{display:flex;align-items:baseline;justify-content:space-between;margin:26px 4px 12px}
+  .ledger-h h2{font-family:'Sora',sans-serif;font-size:19px;margin:0;letter-spacing:-.3px}
+  .count{font-family:'Space Mono',monospace;color:var(--muted);font-size:12.5px}
+  .filters{display:flex;gap:8px;margin:0 0 12px;flex-wrap:wrap}
+  .filters select{font-size:13px;padding:9px 28px 9px 11px;width:auto;min-width:128px;background-color:#fff;border-radius:9px}
+
+  .empty{text-align:center;color:var(--muted);padding:38px 20px;border:1px dashed var(--line-2);border-radius:14px;background:#fff}
+  .empty .ic{font-size:26px;margin-bottom:6px}
+
+  .row{display:flex;gap:13px;align-items:center;background:#fff;border:1px solid var(--line);border-radius:14px;padding:11px;margin-bottom:10px;box-shadow:0 1px 2px rgba(20,23,31,.03)}
+  .row .thumb{width:54px;height:74px;object-fit:cover;border-radius:9px;border:1px solid var(--line);flex:none;cursor:pointer;background:#eef0f3}
+  .row .lines{flex:1;min-width:0;display:grid;grid-template-columns:1fr 1fr;gap:7px}
+  .row .lines input,.row .lines select{padding:8px 9px;font-size:13px;border-radius:8px}
+  .row .lines select{padding-right:26px;background-position:right 8px center}
+  .row .lines .merch{grid-column:1 / -1}
+  .money{grid-column:1 / -1;display:flex;gap:6px}
+  .money select{width:82px;flex:none}
+  .row .del{background:none;border:none;color:var(--muted);cursor:pointer;font-size:17px;padding:6px;border-radius:8px;flex:none;line-height:1}
+  .row .del:hover{color:var(--danger);background:#FCEFEF}
+
+  /* export bar */
+  .exportbar{position:fixed;left:0;right:0;bottom:0;background:rgba(239,241,244,.9);backdrop-filter:blur(12px);border-top:1px solid var(--line);padding:11px 16px;z-index:20}
+  .exportbar .in{max-width:720px;margin:0 auto;display:flex;gap:10px;align-items:center}
+  .exportbar .m{flex:1;font-size:12.5px;color:var(--muted);font-family:'Space Mono',monospace;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+
+  .lightbox{position:fixed;inset:0;background:rgba(15,17,24,.88);display:none;align-items:center;justify-content:center;z-index:50;padding:24px;cursor:zoom-out}
+  .lightbox.on{display:flex}
+  .lightbox img{max-width:100%;max-height:100%;border-radius:12px;box-shadow:0 24px 70px rgba(0,0,0,.55)}
+
+  .foot{color:var(--muted);font-size:11.5px;text-align:center;margin:28px 0 0;font-family:'Space Mono',monospace}
+
+  @media (max-width:520px){.grid{grid-template-columns:1fr}}
+  @media (prefers-reduced-motion:reduce){*{transition:none!important}}
+</style>
+</head>
+<body>
+
+<div class="wrap">
+  <header>
+    <div class="logo">€£₹</div>
+    <div>
+      <div class="app-name">Receipt Ledger</div>
+      <div class="app-tag">Scan receipts · track by person, category & country</div>
+    </div>
+  </header>
+
+  <!-- HERO TOTAL -->
+  <div class="hero empty" id="hero">
+    <div class="lbl">Tracked so far</div>
+    <div class="figs" id="figs"><div class="fig"><span class="v">—</span></div></div>
+    <div class="meta" id="heroMeta">No receipts yet — your running total appears here.</div>
+  </div>
+
+  <!-- CAPTURE -->
+  <div class="card">
+    <div class="sec-h"><span class="sec-n">1</span><h2>Add a receipt</h2></div>
+
+    <label for="file" class="drop" id="drop">
+      <div class="ic">📷</div>
+      <p>Take a photo or choose an image</p>
+      <small>Opens the camera on your phone · JPG / PNG / HEIC</small>
+    </label>
+    <input type="file" id="file" accept="image/*" capture="environment" />
+
+    <div class="preview" id="preview" style="display:none">
+      <img id="previewImg" alt="Receipt preview" />
+      <div class="scan">
+        <div class="status" id="statusTxt">Reading receipt…</div>
+        <div class="bar"><span id="bar"></span></div>
+      </div>
+    </div>
+
+    <div id="editor" style="display:none">
+      <div class="grid">
+        <div class="field full">
+          <label for="fMerchant">Merchant / place</label>
+          <input id="fMerchant" type="text" placeholder="e.g. Café Central" />
+        </div>
+        <div class="field"><label for="fDate">Date</label><input id="fDate" type="date" /></div>
+        <div class="field"><label for="fPerson">Spent by</label><select id="fPerson"></select></div>
+        <div class="field"><label for="fCategory">Category</label><select id="fCategory"></select></div>
+        <div class="field"><label for="fCountry">Country of visit</label><select id="fCountry"></select></div>
+        <div class="field"><label for="fAmount">Amount</label><input id="fAmount" class="amt" type="text" inputmode="decimal" placeholder="0.00" /></div>
+        <div class="field"><label for="fCurrency">Currency</label>
+          <select id="fCurrency"><option value="EUR">EUR €</option><option value="GBP">GBP £</option><option value="INR">INR ₹</option></select>
+        </div>
+      </div>
+      <div class="btn-row">
+        <button class="btn btn-ghost" id="rescanBtn">Scan again</button>
+        <button class="btn btn-primary" id="addBtn">Add to ledger</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- PEOPLE -->
+  <div class="card">
+    <div class="sec-h"><span class="sec-n">2</span><h2>People</h2></div>
+    <div class="chips" id="people"></div>
+    <div class="add-person">
+      <input id="newPerson" type="text" placeholder="Add a name, e.g. Gareth Beaney" />
+      <button class="btn btn-dark" id="addPersonBtn">Add</button>
+    </div>
+  </div>
+
+  <!-- SUMMARY -->
+  <div class="card" id="summaryCard" style="display:none">
+    <div class="sec-h"><span class="sec-n">3</span><h2>Breakdown</h2></div>
+    <div class="seg" id="seg">
+      <button data-v="person" class="on">Person</button>
+      <button data-v="month">Month</button>
+      <button data-v="year">Year</button>
+      <button data-v="category">Category</button>
+      <button data-v="country">Country</button>
+    </div>
+    <div id="summary"></div>
+  </div>
+
+  <!-- LEDGER -->
+  <div class="ledger-h"><h2>Ledger</h2><span class="count" id="count">0 receipts</span></div>
+  <div class="filters" id="filters" style="display:none">
+    <select id="filterPerson"></select>
+    <select id="filterMonth"></select>
+    <select id="filterCategory"></select>
+    <select id="filterCountry"></select>
+  </div>
+  <div id="list"></div>
+
+  <p class="foot" id="foot">All data stays in this browser · OCR by Tesseract.js</p>
+</div>
+
+<div class="exportbar"><div class="in">
+  <span class="m" id="exportMeta">No receipts yet</span>
+  <button class="btn btn-ghost" id="clearBtn">Clear</button>
+  <button class="btn btn-dark" id="exportBtn" disabled>⬇ Excel</button>
+</div></div>
+
+<div class="lightbox" id="lightbox"><img id="lightboxImg" alt="Receipt full size" /></div>
+
+<script>
+const SYM = { EUR:'€', GBP:'£', INR:'₹' };
+const CATEGORIES = ['Travel','Meals','Accommodation','Transport','Groceries','Office supplies','Entertainment','Health','Other'];
+const CCY_COUNTRY = { GBP:'United Kingdom', INR:'India', EUR:'' };
+const COUNTRIES = ["Afghanistan","Albania","Algeria","Andorra","Angola","Argentina","Armenia","Australia","Austria","Azerbaijan","Bahamas","Bahrain","Bangladesh","Barbados","Belarus","Belgium","Belize","Benin","Bhutan","Bolivia","Bosnia and Herzegovina","Botswana","Brazil","Brunei","Bulgaria","Burkina Faso","Burundi","Cambodia","Cameroon","Canada","Cape Verde","Central African Republic","Chad","Chile","China","Colombia","Comoros","Congo","Costa Rica","Croatia","Cuba","Cyprus","Czechia","Denmark","Djibouti","Dominica","Dominican Republic","Ecuador","Egypt","El Salvador","Estonia","Eswatini","Ethiopia","Fiji","Finland","France","Gabon","Gambia","Georgia","Germany","Ghana","Greece","Grenada","Guatemala","Guinea","Guyana","Haiti","Honduras","Hong Kong","Hungary","Iceland","India","Indonesia","Iran","Iraq","Ireland","Israel","Italy","Ivory Coast","Jamaica","Japan","Jordan","Kazakhstan","Kenya","Kuwait","Kyrgyzstan","Laos","Latvia","Lebanon","Lesotho","Liberia","Libya","Liechtenstein","Lithuania","Luxembourg","Macau","Madagascar","Malawi","Malaysia","Maldives","Mali","Malta","Mauritania","Mauritius","Mexico","Moldova","Monaco","Mongolia","Montenegro","Morocco","Mozambique","Myanmar","Namibia","Nepal","Netherlands","New Zealand","Nicaragua","Niger","Nigeria","North Macedonia","Norway","Oman","Pakistan","Panama","Papua New Guinea","Paraguay","Peru","Philippines","Poland","Portugal","Qatar","Romania","Rwanda","Saudi Arabia","Senegal","Serbia","Seychelles","Sierra Leone","Singapore","Slovakia","Slovenia","Somalia","South Africa","South Korea","South Sudan","Spain","Sri Lanka","Sudan","Suriname","Sweden","Switzerland","Syria","Taiwan","Tajikistan","Tanzania","Thailand","Togo","Trinidad and Tobago","Tunisia","Turkey","Turkmenistan","Uganda","Ukraine","United Arab Emirates","United Kingdom","United States","Uruguay","Uzbekistan","Vanuatu","Vatican City","Venezuela","Vietnam","Yemen","Zambia","Zimbabwe"];
+const $ = id => document.getElementById(id);
+const esc = s => String(s).replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+
+function countryOptionsHTML(selected){
+  const sel = (selected && selected!=='Unknown') ? selected : '';
+  let html = `<option value="" ${!sel?'selected':''}>Select country</option>`;
+  if (sel && !COUNTRIES.includes(sel)) html += `<option selected>${esc(sel)}</option>`;
+  html += COUNTRIES.map(c=>`<option ${c===sel?'selected':''}>${esc(c)}</option>`).join('');
+  return html;
+}
+
+/* ---------- IndexedDB ---------- */
+const DB = (() => {
+  let dbp = null;
+  function open(){
+    if (dbp) return dbp;
+    dbp = new Promise((res, rej) => {
+      try { const r = indexedDB.open('receipt-ledger', 2);
+        r.onupgradeneeded = () => { const db=r.result;
+          if(!db.objectStoreNames.contains('bills'))  db.createObjectStore('bills',{keyPath:'id'});
+          if(!db.objectStoreNames.contains('people')) db.createObjectStore('people',{keyPath:'name'});
+        };
+        r.onsuccess=()=>res(r.result); r.onerror=()=>rej(r.error);
+      } catch(e){ rej(e); }
+    });
+    return dbp;
+  }
+  async function all(s){ try{const db=await open(); return await new Promise((res,rej)=>{const t=db.transaction(s,'readonly').objectStore(s).getAll();t.onsuccess=()=>res(t.result||[]);t.onerror=()=>rej(t.error);});}catch(e){return null;} }
+  async function put(s,o){ try{const db=await open(); await new Promise((res,rej)=>{const t=db.transaction(s,'readwrite').objectStore(s).put(o);t.onsuccess=res;t.onerror=()=>rej(t.error);});}catch(e){} }
+  async function del(s,k){ try{const db=await open(); await new Promise((res,rej)=>{const t=db.transaction(s,'readwrite').objectStore(s).delete(k);t.onsuccess=res;t.onerror=()=>rej(t.error);});}catch(e){} }
+  async function clear(s){ try{const db=await open(); await new Promise((res,rej)=>{const t=db.transaction(s,'readwrite').objectStore(s).clear();t.onsuccess=res;t.onerror=()=>rej(t.error);});}catch(e){} }
+  return { all, put, del, clear };
+})();
+
+/* ---------- state ---------- */
+let bills=[], people=[], pending=null, persistent=true, summaryView='person';
+let fPerson='all', fMonth='all', fCat='all', fCountry='all';
+const fileInput = $('file');
+
+/* ---------- image ---------- */
+function loadAndShrink(file, maxDim=1500){
+  return new Promise((resolve, reject)=>{
+    const reader=new FileReader();
+    reader.onload=()=>{ const img=new Image();
+      img.onload=()=>{ let {width:w,height:h}=img; const s=Math.min(1,maxDim/Math.max(w,h)); w=Math.round(w*s); h=Math.round(h*s);
+        const c=document.createElement('canvas'); c.width=w; c.height=h; c.getContext('2d').drawImage(img,0,0,w,h);
+        resolve(c.toDataURL('image/jpeg',0.82)); };
+      img.onerror=reject; img.src=reader.result; };
+    reader.onerror=reject; reader.readAsDataURL(file);
+  });
+}
+
+/* ---------- OCR ---------- */
+async function runOCR(dataUrl){
+  $('bar').style.width='0%'; $('statusTxt').textContent='Loading OCR engine…';
+  const {data}=await Tesseract.recognize(dataUrl,'eng',{ logger:m=>{
+    if(m.status==='recognizing text'){ const p=Math.round(m.progress*100); $('bar').style.width=p+'%'; $('statusTxt').textContent='Reading text… '+p+'%'; }
+    else $('statusTxt').textContent=m.status.replace(/_/g,' ')+'…';
+  }});
+  $('bar').style.width='100%'; $('statusTxt').textContent='Done — check the fields below';
+  return data.text||'';
+}
+
+/* ---------- parse ---------- */
+function parseReceipt(text){
+  const lines=text.split('\n').map(l=>l.trim()).filter(Boolean);
+  let currency='EUR';
+  if(/£|\bGBP\b|pound/i.test(text)) currency='GBP';
+  else if(/₹|\bINR\b|\bRs\.?\b|rupee/i.test(text)) currency='INR';
+  else if(/€|\bEUR\b|euro/i.test(text)) currency='EUR';
+  const moneyRe=/(\d{1,3}(?:[.,]\d{3})*(?:[.,]\d{2})|\d+[.,]\d{2}|\d{2,})/g;
+  function toNumber(s){ s=s.replace(/\s/g,''); const ld=s.lastIndexOf('.'),lc=s.lastIndexOf(',');
+    if(ld!==-1&&lc!==-1){const dec=ld>lc?'.':',';const th=dec==='.'?',':'.';s=s.split(th).join('').replace(dec,'.');}
+    else if(lc!==-1&&ld===-1){s=(/,\d{2}$/.test(s))?s.replace(',','.'):s.split(',').join('');}
+    const n=parseFloat(s); return isFinite(n)?n:null; }
+  function amountsIn(str){const out=[];let m;moneyRe.lastIndex=0;while((m=moneyRe.exec(str))!==null){const n=toNumber(m[1]);if(n!==null)out.push(n);}return out;}
+  let amount=null;
+  const tl=lines.filter(l=>/\b(grand\s*total|total|amount\s*due|balance\s*due|to\s*pay|net\s*payable)\b/i.test(l)&&!/sub\s*total/i.test(l));
+  for(const l of tl){const a=amountsIn(l);if(a.length)amount=Math.max(amount??0,Math.max(...a));}
+  if(amount===null){const all=lines.flatMap(amountsIn).filter(n=>n>=0);if(all.length)amount=Math.max(...all);}
+  let date='';
+  const months={jan:1,feb:2,mar:3,apr:4,may:5,jun:6,jul:7,aug:8,sep:9,oct:10,nov:11,dec:12};
+  const numeric=text.match(/\b(\d{1,2})[\/\-.](\d{1,2})[\/\-.](\d{2,4})\b/);
+  const iso=text.match(/\b(\d{4})-(\d{1,2})-(\d{1,2})\b/);
+  const named=text.match(/\b(\d{1,2})\s*([A-Za-z]{3,})\s*(\d{4})\b/)||text.match(/\b([A-Za-z]{3,})\s*(\d{1,2}),?\s*(\d{4})\b/);
+  const pad=n=>String(n).padStart(2,'0');
+  try{
+    if(iso){date=`${iso[1]}-${pad(iso[2])}-${pad(iso[3])}`;}
+    else if(numeric){let[_,d,mo,y]=numeric;if(y.length===2)y='20'+y;d=+d;mo=+mo;if(mo>12&&d<=12){const t=d;d=mo;mo=t;}date=`${y}-${pad(mo)}-${pad(d)}`;}
+    else if(named){let d,ms,y;if(/^\d/.test(named[1])){d=named[1];ms=named[2];y=named[3];}else{ms=named[1];d=named[2];y=named[3];}const mo=months[ms.slice(0,3).toLowerCase()];if(mo)date=`${y}-${pad(mo)}-${pad(+d)}`;}
+  }catch(e){date='';}
+  if(!date)date=new Date().toISOString().slice(0,10);
+  let merchant='';
+  for(const l of lines.slice(0,6)){const letters=(l.match(/[A-Za-z]/g)||[]).length;
+    if(letters>=3&&!/^\d/.test(l)&&!/(receipt|invoice|tax|gst|vat|tel|phone|www|http)/i.test(l)){merchant=l.replace(/[^\w &'.\-,]/g,'').trim();break;}}
+  return {date,merchant,amount:amount!=null?amount.toFixed(2):'',currency};
+}
+
+function fillSelect(sel,options,selected){
+  const set=[...options]; if(selected&&!set.includes(selected))set.unshift(selected); if(!set.length)set.push('—');
+  sel.innerHTML=set.map(o=>`<option ${o===selected?'selected':''}>${esc(o)}</option>`).join('');
+}
+
+/* ---------- capture ---------- */
+async function handleFile(file){
+  if(!file)return;
+  $('preview').style.display='flex'; $('editor').style.display='none';
+  $('bar').style.width='0%'; $('statusTxt').textContent='Preparing image…';
+  let dataUrl;
+  try{dataUrl=await loadAndShrink(file);}catch(e){$('statusTxt').textContent='Could not read that image. Try another.';return;}
+  pending=dataUrl; $('previewImg').src=dataUrl;
+  let text=''; try{text=await runOCR(dataUrl);}catch(e){$('statusTxt').textContent='OCR unavailable (no internet?). Enter details by hand.';}
+  const g=parseReceipt(text);
+  $('fMerchant').value=g.merchant||'';
+  $('fDate').value=g.date||new Date().toISOString().slice(0,10);
+  $('fAmount').value=g.amount||'';
+  $('fCurrency').value=g.currency||'EUR';
+  $('fCountry').innerHTML=countryOptionsHTML(CCY_COUNTRY[g.currency]||'');
+  fillSelect($('fPerson'),people,people[0]||'Me');
+  fillSelect($('fCategory'),CATEGORIES,'Travel');
+  $('editor').style.display='block';
+}
+function resetEditor(){pending=null;fileInput.value='';$('preview').style.display='none';$('editor').style.display='none';}
+
+async function addBill(){
+  const amount=parseFloat(String($('fAmount').value).replace(',','.'));
+  if(!isFinite(amount)){$('fAmount').focus();$('fAmount').style.borderColor='var(--danger)';return;}
+  $('fAmount').style.borderColor='';
+  const bill={ id:Date.now()+'-'+Math.random().toString(36).slice(2,7),
+    merchant:$('fMerchant').value.trim()||'Untitled',
+    date:$('fDate').value||new Date().toISOString().slice(0,10),
+    amount:+amount.toFixed(2), currency:$('fCurrency').value,
+    person:$('fPerson').value||'Unassigned',
+    category:$('fCategory').value||'Uncategorised',
+    country:$('fCountry').value.trim()||'Unknown', img:pending };
+  bills.unshift(bill); await DB.put('bills',bill); resetEditor(); render();
+}
+async function updateBill(id,patch){ const b=bills.find(x=>x.id===id); if(!b)return; Object.assign(b,patch); await DB.put('bills',b); renderHero(); renderSummary(); renderFilters(); renderExportMeta(); }
+async function deleteBill(id){ bills=bills.filter(b=>b.id!==id); await DB.del('bills',id); render(); }
+async function clearAll(){ if(!bills.length)return; if(!confirm('Remove all receipts from this browser? This cannot be undone.'))return; bills=[]; await DB.clear('bills'); render(); }
+
+/* ---------- people ---------- */
+async function addPerson(name){ name=(name||'').trim(); if(!name)return; if(people.some(p=>p.toLowerCase()===name.toLowerCase()))return; people.push(name); await DB.put('people',{name}); renderPeople(); $('newPerson').value=''; }
+async function removePerson(name){ people=people.filter(p=>p!==name); await DB.del('people',name); renderPeople(); }
+function renderPeople(){
+  $('people').innerHTML = people.length
+    ? people.map(p=>`<span class="chip ${p==='Me'?'me':''}">${esc(p)}<button data-rm="${esc(p)}" title="Remove">✕</button></span>`).join('')
+    : `<span style="color:var(--muted);font-size:13px">No names yet — add one below.</span>`;
+  $('people').querySelectorAll('[data-rm]').forEach(b=>b.addEventListener('click',()=>removePerson(b.dataset.rm)));
+  if($('editor').style.display==='block') fillSelect($('fPerson'),people,$('fPerson').value||people[0]);
+  renderFilters();
+}
+
+/* ---------- aggregation ---------- */
+function fmt(n,cur){ try{return new Intl.NumberFormat(undefined,{style:'currency',currency:cur}).format(n);}catch(e){return (SYM[cur]||'')+n.toFixed(2);} }
+function totalsByCurrency(list){const t={};for(const b of list){t[b.currency]=(t[b.currency]||0)+(+b.amount||0);}return t;}
+function monthLabel(ym){const[y,m]=ym.split('-');return new Date(+y,(+m)-1,1).toLocaleString(undefined,{month:'long',year:'numeric'});}
+function summaryData(keyFn){const m={};for(const b of bills){const k=keyFn(b)||'—';(m[k]??={})[b.currency]??={sum:0,n:0};m[k][b.currency].sum+=(+b.amount||0);m[k][b.currency].n++;}return m;}
+const keyOf={ person:b=>b.person||'Unassigned', month:b=>(b.date||'').slice(0,7), year:b=>(b.date||'').slice(0,4), category:b=>b.category||'Uncategorised', country:b=>b.country||'Unknown' };
+function sumAll(byCur){return Object.values(byCur).reduce((s,v)=>s+v.sum,0);}
+const SORT_BY_TOTAL=new Set(['person','category','country']);
+
+/* ---------- hero ---------- */
+function renderHero(){
+  const hero=$('hero'), t=totalsByCurrency(bills), curs=Object.keys(t);
+  if(!bills.length){
+    hero.classList.add('empty');
+    $('figs').innerHTML=`<div class="fig"><span class="v">—</span></div>`;
+    $('heroMeta').innerHTML='No receipts yet — your running total appears here.';
+    return;
+  }
+  hero.classList.remove('empty');
+  $('figs').innerHTML=curs.map(c=>`<div class="fig"><span class="v num">${fmt(t[c],c)}</span><span class="c">${c} · ${SYM[c]}</span></div>`).join('');
+  const nPeople=new Set(bills.map(b=>b.person||'Unassigned')).size;
+  const nCountries=new Set(bills.map(b=>b.country||'Unknown').filter(c=>c!=='Unknown')).size;
+  $('heroMeta').innerHTML=`<span><b>${bills.length}</b> receipt${bills.length>1?'s':''}</span><span><b>${nPeople}</b> ${nPeople>1?'people':'person'}</span><span><b>${nCountries}</b> countr${nCountries===1?'y':'ies'}</span>`;
+}
+
+/* ---------- summary ---------- */
+function renderSummary(){
+  $('summaryCard').style.display=bills.length?'block':'none';
+  const box=$('summary');
+  const data=summaryData(keyOf[summaryView]);
+  let keys=Object.keys(data);
+  if(SORT_BY_TOTAL.has(summaryView)) keys.sort((a,b)=>sumAll(data[b])-sumAll(data[a])); else keys.sort().reverse();
+  box.innerHTML=keys.map(k=>{
+    const label=summaryView==='month'?monthLabel(k):k;
+    const totalN=Object.values(data[k]).reduce((s,v)=>s+v.n,0);
+    const lines=Object.keys(data[k]).map(c=>`<div class="tline"><span class="cur">${c} ${SYM[c]}</span><span class="val">${fmt(data[k][c].sum,c)}</span></div>`).join('');
+    return `<div class="grp"><div class="ghead"><span class="gname">${esc(label)}</span><span class="gcount">${totalN} receipt${totalN>1?'s':''}</span></div>${lines}</div>`;
+  }).join('');
+}
+
+/* ---------- filters + list ---------- */
+function renderFilters(){
+  const persons=[...new Set([...people,...bills.map(b=>b.person||'Unassigned')])];
+  const months=[...new Set(bills.map(b=>(b.date||'').slice(0,7)).filter(Boolean))].sort().reverse();
+  const cats=[...new Set([...CATEGORIES,...bills.map(b=>b.category||'Uncategorised')])];
+  const countries=[...new Set(bills.map(b=>b.country||'Unknown'))].sort();
+  $('filterPerson').innerHTML=`<option value="all">All people</option>`+persons.map(p=>`<option value="${esc(p)}" ${fPerson===p?'selected':''}>${esc(p)}</option>`).join('');
+  $('filterMonth').innerHTML=`<option value="all">All months</option>`+months.map(m=>`<option value="${m}" ${fMonth===m?'selected':''}>${monthLabel(m)}</option>`).join('');
+  $('filterCategory').innerHTML=`<option value="all">All categories</option>`+cats.map(c=>`<option value="${esc(c)}" ${fCat===c?'selected':''}>${esc(c)}</option>`).join('');
+  $('filterCountry').innerHTML=`<option value="all">All countries</option>`+countries.map(c=>`<option value="${esc(c)}" ${fCountry===c?'selected':''}>${esc(c)}</option>`).join('');
+  $('filters').style.display=bills.length?'flex':'none';
+}
+function visibleBills(){
+  return bills.filter(b=>
+    (fPerson==='all'||(b.person||'Unassigned')===fPerson)&&
+    (fMonth==='all'||(b.date||'').slice(0,7)===fMonth)&&
+    (fCat==='all'||(b.category||'Uncategorised')===fCat)&&
+    (fCountry==='all'||(b.country||'Unknown')===fCountry));
+}
+function renderList(){
+  const list=$('list'), shown=visibleBills();
+  $('count').textContent=bills.length+(bills.length===1?' receipt':' receipts')+(shown.length!==bills.length?` · ${shown.length} shown`:'');
+  if(!bills.length){list.innerHTML=`<div class="empty"><div class="ic">🧾</div><p>No receipts yet. Snap one above to begin.</p></div>`;return;}
+  if(!shown.length){list.innerHTML=`<div class="empty"><div class="ic">🔍</div><p>No receipts match these filters.</p></div>`;return;}
+  list.innerHTML='';
+  for(const b of shown){
+    const row=document.createElement('div'); row.className='row';
+    row.innerHTML=`
+      <img class="thumb" src="${b.img||''}" alt="${esc(b.merchant)}" />
+      <div class="lines">
+        <input class="merch" type="text" value="${esc(b.merchant)}" data-k="merchant" />
+        <input type="date" value="${b.date}" data-k="date" />
+        <select data-k="person"></select>
+        <select data-k="category"></select>
+        <select data-k="country"></select>
+        <div class="money">
+          <input class="amt" type="text" inputmode="decimal" value="${b.amount}" data-k="amount" />
+          <select data-k="currency">
+            <option value="EUR" ${b.currency==='EUR'?'selected':''}>EUR</option>
+            <option value="GBP" ${b.currency==='GBP'?'selected':''}>GBP</option>
+            <option value="INR" ${b.currency==='INR'?'selected':''}>INR</option>
+          </select>
+        </div>
+      </div>
+      <button class="del" title="Delete">✕</button>`;
+    fillSelect(row.querySelector('[data-k="person"]'),people,b.person||'Unassigned');
+    fillSelect(row.querySelector('[data-k="category"]'),CATEGORIES,b.category||'Uncategorised');
+    row.querySelector('[data-k="country"]').innerHTML=countryOptionsHTML(b.country||'');
+    row.querySelector('.thumb').addEventListener('click',()=>openLightbox(b.img));
+    row.querySelectorAll('[data-k]').forEach(el=>{ const ev=el.tagName==='SELECT'?'change':'input';
+      el.addEventListener(ev,()=>{ let v=el.value; const k=el.dataset.k;
+        if(k==='amount'){const n=parseFloat(String(v).replace(',','.'));if(!isFinite(n))return;v=+n.toFixed(2);}
+        if(k==='country'){v=v.trim()||'Unknown';}
+        updateBill(b.id,{[k]:v}); });
+    });
+    row.querySelector('.del').addEventListener('click',()=>deleteBill(b.id));
+    list.appendChild(row);
+  }
+}
+function renderExportMeta(){
+  const t=totalsByCurrency(bills), parts=Object.keys(t).map(c=>fmt(t[c],c));
+  $('exportMeta').textContent=bills.length?`${bills.length} receipt${bills.length>1?'s':''} · ${parts.join('  ·  ')}`:'No receipts yet';
+  $('exportBtn').disabled=!bills.length;
+  $('foot').textContent=persistent?'All data stays in this browser · OCR by Tesseract.js':'This preview has no storage — deploy to GitHub Pages to keep data between visits';
+}
+function render(){ renderHero(); renderSummary(); renderFilters(); renderList(); renderExportMeta(); }
+
+function openLightbox(src){if(!src)return;$('lightboxImg').src=src;$('lightbox').classList.add('on');}
+$('lightbox').addEventListener('click',()=>$('lightbox').classList.remove('on'));
+
+/* ---------- Excel ---------- */
+function styleHeader(row){row.font={bold:true,color:{argb:'FFFFFFFF'}};row.eachCell(c=>{c.fill={type:'pattern',pattern:'solid',fgColor:{argb:'FF14171F'}};});}
+function addSummarySheet(wb,title,keyFn,byTotal,labelFn){
+  const ws=wb.addWorksheet(title);
+  ws.columns=[{header:title.replace('By ',''),key:'g',width:26},{header:'Currency',key:'c',width:10},{header:'Total',key:'t',width:14},{header:'Receipts',key:'n',width:10}];
+  styleHeader(ws.getRow(1));
+  const data=summaryData(keyFn); let keys=Object.keys(data);
+  if(byTotal)keys.sort((a,b)=>sumAll(data[b])-sumAll(data[a]));else keys.sort().reverse();
+  for(const k of keys){for(const c of Object.keys(data[k])){const r=ws.addRow([labelFn?labelFn(k):k,c,data[k][c].sum,data[k][c].n]);r.getCell(3).numFmt='#,##0.00';}}
+}
+async function exportExcel(){
+  const btn=$('exportBtn'),old=btn.textContent; btn.disabled=true; btn.textContent='Building…';
+  try{
+    const wb=new ExcelJS.Workbook(); wb.creator='Receipt Ledger';
+    const ws=wb.addWorksheet('Receipts',{views:[{state:'frozen',ySplit:2}]});
+    ws.columns=[{header:'',key:'i',width:5},{header:'Date',key:'date',width:13},{header:'Merchant / place',key:'merchant',width:26},{header:'Spent by',key:'person',width:16},{header:'Category',key:'category',width:15},{header:'Country',key:'country',width:16},{header:'Amount',key:'amount',width:12},{header:'Currency',key:'currency',width:9},{header:'Receipt',key:'img',width:22}];
+    ws.spliceRows(1,0,[]); ws.mergeCells('A1:I1');
+    const title=ws.getCell('A1'); title.value='Expense report — generated '+new Date().toLocaleDateString(); title.font={bold:true,size:14,color:{argb:'FF14171F'}}; ws.getRow(1).height=22;
+    styleHeader(ws.getRow(2)); ws.getRow(2).alignment={vertical:'middle'};
+    bills.forEach((b,idx)=>{
+      const r=ws.addRow({i:idx+1,date:b.date,merchant:b.merchant,person:b.person||'Unassigned',category:b.category||'Uncategorised',country:b.country||'Unknown',amount:b.amount,currency:b.currency,img:''});
+      r.height=64; r.alignment={vertical:'middle'}; r.getCell('amount').numFmt='#,##0.00'; r.getCell('amount').font={bold:true};
+      const m=/^data:image\/(\w+);base64,(.*)$/.exec(b.img||'');
+      if(m){const ext=m[1]==='png'?'png':'jpeg';const id=wb.addImage({base64:m[2],extension:ext});ws.addImage(id,{tl:{col:8,row:(r.number-1)+0.1},ext:{width:118,height:80}});}
+    });
+    addSummarySheet(wb,'By person',keyOf.person,true);
+    addSummarySheet(wb,'By month',keyOf.month,false,monthLabel);
+    addSummarySheet(wb,'By year',keyOf.year,false);
+    addSummarySheet(wb,'By category',keyOf.category,true);
+    addSummarySheet(wb,'By country',keyOf.country,true);
+    const buf=await wb.xlsx.writeBuffer();
+    const blob=new Blob([buf],{type:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'});
+    const url=URL.createObjectURL(blob),a=document.createElement('a');
+    a.href=url; a.download='expense-report-'+new Date().toISOString().slice(0,10)+'.xlsx'; a.click(); URL.revokeObjectURL(url);
+  }catch(e){ alert('Building the Excel file failed: '+e.message); console.error(e); }
+  finally{ btn.textContent=old; btn.disabled=!bills.length; }
+}
+
+/* ---------- wire ---------- */
+fileInput.addEventListener('change',e=>handleFile(e.target.files[0]));
+$('rescanBtn').addEventListener('click',resetEditor);
+$('addBtn').addEventListener('click',addBill);
+$('addPersonBtn').addEventListener('click',()=>addPerson($('newPerson').value));
+$('newPerson').addEventListener('keydown',e=>{if(e.key==='Enter')addPerson($('newPerson').value);});
+$('exportBtn').addEventListener('click',exportExcel);
+$('clearBtn').addEventListener('click',clearAll);
+$('seg').addEventListener('click',e=>{const b=e.target.closest('button');if(!b)return;summaryView=b.dataset.v;$('seg').querySelectorAll('button').forEach(x=>x.classList.toggle('on',x===b));renderSummary();});
+$('filterPerson').addEventListener('change',e=>{fPerson=e.target.value;renderList();});
+$('filterMonth').addEventListener('change',e=>{fMonth=e.target.value;renderList();});
+$('filterCategory').addEventListener('change',e=>{fCat=e.target.value;renderList();});
+$('filterCountry').addEventListener('change',e=>{fCountry=e.target.value;renderList();});
+
+/* ---------- boot ---------- */
+(async()=>{
+  const sb=await DB.all('bills'), sp=await DB.all('people');
+  if(sb===null){persistent=false;} else bills=sb.sort((a,b)=>(b.id>a.id?1:-1));
+  if(sp&&sp.length)people=sp.map(p=>p.name); else {people=['Me'];await DB.put('people',{name:'Me'});}
+  $('fCountry').innerHTML=countryOptionsHTML('');
+  renderPeople(); render();
+})();
+</script>
+</body>
+</html>
