@@ -366,6 +366,10 @@
   .appcard .btn-ghost{background:transparent;color:#fff;border-color:rgba(255,255,255,.3)}
   .appcard a.btn{text-decoration:none}
   @media (max-width:520px){ .appcard{grid-template-columns:1fr;text-align:left} .appcard .phone{display:none} .appcard .qr{width:116px;height:116px} }
+  .resetrow{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-top:12px;padding-top:12px;border-top:1px dashed var(--line-2)}
+  .resetrow .hint{flex:1;min-width:160px}
+  #askBtns{flex-wrap:wrap}
+  #askBtns .btn{flex:1 1 40%}
   .foot{color:var(--muted);font-size:11.5px;text-align:center;margin:22px 0 0;font-family:'Space Mono',monospace}
 
   @media (max-width:640px){
@@ -429,6 +433,7 @@
           <button class="qbtn" data-dl="csv"><span class="qi"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="4" width="16" height="16" rx="2"/><path d="M4 10h16M4 15h16M10 4v16"/></svg></span>CSV<small>Plain table</small></button>
           <button class="qbtn" data-dl="backup"><span class="qi"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 4v11"/><path d="m7.5 10.5 4.5 4.5 4.5-4.5"/><path d="M4 18v2h16v-2"/></svg></span>Backup<small>Everything</small></button>
         </div>
+        <div class="resetrow"><button class="btn btn-danger btn-sm" id="resetBtn">↺ Reset receipts</button><span class="hint">Start fresh. You can back up first, and undo straight after.</span></div>
       </div>
     </div>
 
@@ -715,7 +720,7 @@ function askChoice(title,msg,buttons){
     _askRes=res; $('askTitle').textContent=title; $('askMsg').textContent=msg;
     $('askBtns').innerHTML=buttons.map(([v,l,c])=>`<button class="btn ${c||'btn-ghost'}" data-v="${v}">${l}</button>`).join('');
     $('askBtns').querySelectorAll('[data-v]').forEach(b=>b.addEventListener('click',()=>{ const r=_askRes; _askRes=null; $('askSheet').classList.remove('on'); if(!document.querySelector('.sheet.on')) document.body.classList.remove('locked'); r&&r(b.dataset.v); }));
-    openSheet('askSheet');
+    $('toast').classList.remove('on'); openSheet('askSheet');
   });
 }
 async function askConfirm(msg){ const danger=/^delete|remove/i.test(msg); return (await askChoice('Please confirm',msg,[['no','Cancel','btn-ghost'],['yes',danger?'Delete':'Yes, go ahead',danger?'btn-danger':'btn-gold']]))==='yes'; }
@@ -1514,7 +1519,7 @@ function renderExport(){
   const shown=visibleBills();
   $('dlAside').textContent=shown.length?`${shown.length} receipt${shown.length===1?'':'s'} · ${fmtB(baseSum(shown))}`:'Nothing to download yet';
   document.querySelectorAll('[data-dl=xlsx],[data-dl=csv]').forEach(b=>b.disabled=!shown.length);
-  document.querySelector('[data-dl=backup]').disabled=!bills.length;
+  document.querySelector('[data-dl=backup]').disabled=!bills.length; $('resetBtn').disabled=!bills.length&&!trips.length;
   $('expScope').textContent=scopeLabel()+(filtersActive()?' · with ledger filters':'');
   $('expTotal').textContent=shown.length?fmtB(baseSum(shown)):'—';
   $('expCount').textContent=`${shown.length} receipt${shown.length===1?'':'s'}`;
@@ -1745,7 +1750,7 @@ $('resetRates').addEventListener('click',async()=>{ settings.rates={...SEED_RATE
 $('backupBtn').addEventListener('click',backup);
 $('restoreBtn').addEventListener('click',()=>$('restoreFile').click());
 $('restoreFile').addEventListener('change',e=>{ const f=e.target.files[0]; if(f) restore(f); e.target.value=''; });
-$('clearBtn').addEventListener('click',clearAll);
+$('clearBtn').addEventListener('click',resetFlow);
 let _rzT=null; window.addEventListener('resize',()=>{ clearTimeout(_rzT); _rzT=setTimeout(()=>{ const s=_lastFlap; _lastFlap=s; if(view==='overview'&&s){ const keep=s; setFlap(keep); } },150); });
 
 /* =================== install as app =================== */
@@ -1780,6 +1785,38 @@ $('installBig').addEventListener('click',async()=>{
 });
 $('installHow').addEventListener('click',showInstallHelp);
 window.addEventListener('appinstalled',()=>$('appCard').classList.add('hide'));
+
+/* =================== reset =================== */
+async function resetFlow(){
+  if(!bills.length&&!trips.length&&people.length<=1) return toast('Nothing to reset yet');
+  const where=(typeof Cloud!=='undefined'&&Cloud.on)?'this device and your account':'this device';
+  const c=await askChoice('Reset receipts',`Remove your ${bills.length} receipt${bills.length===1?'':'s'} from ${where}? You can undo for a few seconds afterwards.`,
+    [['backup','⬇ Back up first','btn-ghost'],['cancel','Cancel','btn-ghost'],['receipts','Delete receipts','btn-danger'],['all','Reset everything','btn-danger']]);
+  if(!c||c==='cancel') return;
+  if(c==='backup'){ await backup(); return resetFlow(); }
+  const snap={bills:[...bills],trips:[...trips],people:[...people],settings:JSON.parse(JSON.stringify(settings))};
+  bills=[]; await DB.clear('bills');
+  if(c==='all'){
+    trips=[]; await DB.clear('trips');
+    for(const p of people) await DB.del('people',p);
+    people=['Me']; await DB.put('people',{name:'Me'});
+    settings={...settings,base:'EUR',rates:{...SEED_RATES},ratesSource:'approx',ratesDate:null,last:{}};
+    await saveSettings();
+    scope='all';
+  }
+  F={...F,q:'',person:'all',month:'all',cat:'all',country:'all',status:'all'}; if($('q')) $('q').value='';
+  _lastFlap=''; render(); go('overview');
+  toast(c==='all'?'Everything reset':'Receipts cleared', async()=>{
+    bills=snap.bills; for(const b of bills) await DB.put('bills',b);
+    if(c==='all'){
+      trips=snap.trips; for(const t of trips) await DB.put('trips',t);
+      await DB.del('people','Me'); people=snap.people; for(const n of people) await DB.put('people',{name:n});
+      settings={...settings,...snap.settings}; await saveSettings();
+    }
+    _lastFlap=''; render(); toast('Restored');
+  });
+}
+$('resetBtn').addEventListener('click',resetFlow);
 
 /* =================== boot =================== */
 (async()=>{
