@@ -1,0 +1,22 @@
+{
+  "name": "Receipt Ledger",
+  "short_name": "Receipts",
+  "description": "Scan receipts, track travel expenses by trip, person and country, and export Excel reports.",
+  "id": "./",
+  "start_url": "./#overview",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#0B1D3A",
+  "theme_color": "#0B1D3A",
+  "categories": ["finance", "productivity", "business"],
+  "icons": [
+    { "src": "icons/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "icons/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
+    { "src": "icons/maskable-192.png", "sizes": "192x192", "type": "image/png", "purpose": "maskable" },
+    { "src": "icons/maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ],
+  "shortcuts": [
+    { "name": "Add a receipt", "url": "./#ledger", "icons": [{ "src": "icons/icon-192.png", "sizes": "192x192" }] }
+  ]
+}
